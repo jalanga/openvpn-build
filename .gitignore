@@ -8,3 +8,6 @@ tmp
 *.pfx
 *.cer
 *.crt
+./.idea/*
+.idea/
+.idea/*
