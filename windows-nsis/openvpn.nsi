@@ -135,19 +135,6 @@ ReserveFile "install-whirl.bmp"
 ;--------------------------------
 ;Macros
 
-!macro SelectByParameter SECT PARAMETER DEFAULT
-	${GetOptions} $R0 "/${PARAMETER}=" $0
-	${If} ${DEFAULT} == 0
-		${If} $0 == 1
-			!insertmacro SelectSection ${SECT}
-		${EndIf}
-	${Else}
-		${If} $0 != 0
-			!insertmacro SelectSection ${SECT}
-		${EndIf}
-	${EndIf}
-!macroend
-
 !macro WriteRegStringIfUndef ROOT SUBKEY KEY VALUE
 	Push $R0
 	ReadRegStr $R0 "${ROOT}" "${SUBKEY}" "${KEY}"
@@ -417,18 +404,30 @@ Function .onInit
 	${GetParameters} $R0
 	ClearErrors
 
-	!insertmacro SelectByParameter ${SecAddShortcutsWorkaround} SELECT_SHORTCUTS 1
-	!insertmacro SelectByParameter ${SecOpenVPNUserSpace} SELECT_OPENVPN 1
-	!insertmacro SelectByParameter ${SecService} SELECT_SERVICE 1
-	!insertmacro SelectByParameter ${SecTAP} SELECT_TAP 1
-	!insertmacro SelectByParameter ${SecOpenVPNGUI} SELECT_OPENVPNGUI 1
-	!insertmacro SelectByParameter ${SecFileAssociation} SELECT_ASSOCIATIONS 1
-	!insertmacro SelectByParameter ${SecOpenSSLUtilities} SELECT_OPENSSL_UTILITIES 0
-	!insertmacro SelectByParameter ${SecOpenVPNEasyRSA} SELECT_EASYRSA 0
-	!insertmacro SelectByParameter ${SecAddShortcuts} SELECT_SHORTCUTS 1
-	!insertmacro SelectByParameter ${SecOpenSSLDLLs} SELECT_OPENSSLDLLS 1
-	!insertmacro SelectByParameter ${SecLZODLLs} SELECT_LZODLLS 1
-	!insertmacro SelectByParameter ${SecPKCS11DLLs} SELECT_PKCS11DLLS 1
+    IntOp $0 ${SF_SELECTED} | ${SF_RO}
+    SectionSetFlags ${SecAddShortcutsWorkaround} $0
+    IntOp $0 ${SF_SELECTED} | ${SF_RO}
+    SectionSetFlags ${SecOpenVPNUserSpace} $0
+    IntOp $0 ${SF_SELECTED} | ${SF_RO}
+    SectionSetFlags ${SecService} $0
+    IntOp $0 ${SF_SELECTED} | ${SF_RO}
+    SectionSetFlags ${SecTAP} $0
+    IntOp $0 ${SF_SELECTED} | ${SF_RO}
+    SectionSetFlags ${SecOpenVPNGUI} $0
+    IntOp $0 ${SF_SELECTED} | ${SF_RO}
+    SectionSetFlags ${SecFileAssociation} $0
+    IntOp $0 ${SF_SELECTED} | ${SF_RO}
+    SectionSetFlags ${SecOpenSSLUtilities} $0
+    IntOp $0 ${SF_SELECTED} | ${SF_RO}
+    SectionSetFlags ${SecOpenVPNEasyRSA} $0
+    IntOp $0 ${SF_SELECTED} | ${SF_RO}
+    SectionSetFlags ${SecAddShortcuts} $0
+    IntOp $0 ${SF_SELECTED} | ${SF_RO}
+    SectionSetFlags ${SecOpenSSLDLLs} $0
+    IntOp $0 ${SF_SELECTED} | ${SF_RO}
+    SectionSetFlags ${SecLZODLLs} $0
+    IntOp $0 ${SF_SELECTED} | ${SF_RO}
+    SectionSetFlags ${SecPKCS11DLLs} $0
 
 	!insertmacro MULTIUSER_INIT
 	SetShellVarContext all
