@@ -95,7 +95,6 @@ main() {
 		${TAP_WINDOWS_INSTALLER:+-DUSE_TAP_WINDOWS} \
 		-DEASYRSA_ROOT="$(dospath "${EASYRSA_ROOT}")" \
 		${EASYRSA_TARBALL:+-DUSE_EASYRSA} \
-		-DUSE_OPENVPN_GUI \
 		-DOUTPUT="${OUTPUT}" \
 		openvpn.nsi || die "makensis"
 

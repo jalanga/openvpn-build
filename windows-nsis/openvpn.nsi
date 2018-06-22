@@ -21,9 +21,6 @@ SetCompressor lzma
 ; EnvVarUpdate.nsh is needed to update the PATH environment variable
 !include "EnvVarUpdate.nsh"
 
-; WinMessages.nsh is needed to send WM_CLOSE to the GUI if it is still running
-!include "WinMessages.nsh"
-
 ; nsProcess.nsh to detect whether OpenVPN process is running ( http://nsis.sourceforge.net/NsProcess_plugin )
 !addplugindir .
 !include "nsProcess.nsh"
@@ -71,8 +68,6 @@ InstallDirRegKey HKLM "SOFTWARE\${PACKAGE_NAME}" ""
 
 !define MUI_COMPONENTSPAGE_SMALLDESC
 !define MUI_FINISHPAGE_SHOWREADME "$INSTDIR\doc\INSTALL-win32.txt"
-!define MUI_FINISHPAGE_RUN_TEXT "Start OpenVPN GUI"
-!define MUI_FINISHPAGE_RUN "$INSTDIR\bin\openvpn-gui.exe"
 !define MUI_FINISHPAGE_RUN_NOTCHECKED
 
 !define MUI_FINISHPAGE_NOAUTOCLOSE
@@ -88,14 +83,11 @@ InstallDirRegKey HKLM "SOFTWARE\${PACKAGE_NAME}" ""
 !insertmacro MUI_PAGE_COMPONENTS
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
-!define MUI_PAGE_CUSTOMFUNCTION_SHOW StartGUI.show
 !insertmacro MUI_PAGE_FINISH
 
 !insertmacro MUI_UNPAGE_CONFIRM
 !insertmacro MUI_UNPAGE_INSTFILES
 !insertmacro MUI_UNPAGE_FINISH
-
-Var /Global strGuiKilled ; Track if GUI was killed so we can tick the checkbox to start it upon installer finish
 
 ;--------------------------------
 ;Languages
@@ -106,8 +98,6 @@ Var /Global strGuiKilled ; Track if GUI was killed so we can tick the checkbox t
 ;Language Strings
 
 LangString DESC_SecOpenVPNUserSpace ${LANG_ENGLISH} "Install ${PACKAGE_NAME} user-space components, including openvpn.exe."
-
-LangString DESC_SecOpenVPNGUI ${LANG_ENGLISH} "Install ${PACKAGE_NAME} GUI by Mathias Sundman"
 
 LangString DESC_SecTAP ${LANG_ENGLISH} "Install/upgrade the TAP virtual device driver."
 
@@ -175,49 +165,24 @@ ReserveFile "install-whirl.bmp"
 ;Pre-install section
 
 Section -pre
-	Push $0 ; for FindWindow
-	FindWindow $0 "OpenVPN-GUI"
-	StrCmp $0 0 guiNotRunning
+    ; check for running openvpn.exe processes
+    ${nsProcess::FindProcess} "openvpn.exe" $R0
+    ${If} $R0 == 0
+        MessageBox MB_OK|MB_ICONEXCLAMATION "The installation cannot continue as OpenVPN is currently running. Please close all OpenVPN instances and re-run the installer."
+        Quit
+    ${EndIf}
 
-	MessageBox MB_YESNO|MB_ICONEXCLAMATION "To perform the specified operation, OpenVPN-GUI needs to be closed. Shall I close it?" /SD IDYES IDNO guiEndNo
-	DetailPrint "Closing OpenVPN-GUI..."
-	Goto guiEndYes
+    ; openvpn.exe + GUI not running/closed successfully, carry on with install/upgrade
 
-	guiEndNo:
-		Quit
+    ; Delete previous start menu folder
+    RMDir /r "$SMPROGRAMS\${PACKAGE_NAME}"
 
-	guiEndYes:
-		; user wants to close GUI as part of install/upgrade
-		FindWindow $0 "OpenVPN-GUI"
-		IntCmp $0 0 guiClosed
-		SendMessage $0 ${WM_CLOSE} 0 0
-		Sleep 100
-		Goto guiEndYes
+    ; Stop & Remove previous OpenVPN service
+    DetailPrint "Removing any previous OpenVPN service..."
+    nsExec::ExecToLog '"$INSTDIR\bin\openvpnserv.exe" -remove'
+    Pop $R0 # return value/error/timeout
 
-	guiClosed:
-		; Keep track that we closed the GUI so we can offer to auto (re)start it later
-		StrCpy $strGuiKilled "1"
-
-	guiNotRunning:
-		; check for running openvpn.exe processes
-		${nsProcess::FindProcess} "openvpn.exe" $R0
-		${If} $R0 == 0
-			MessageBox MB_OK|MB_ICONEXCLAMATION "The installation cannot continue as OpenVPN is currently running. Please close all OpenVPN instances and re-run the installer."
-			Quit
-		${EndIf}
-
-		; openvpn.exe + GUI not running/closed successfully, carry on with install/upgrade
-	
-		; Delete previous start menu folder
-		RMDir /r "$SMPROGRAMS\${PACKAGE_NAME}"
-
-		; Stop & Remove previous OpenVPN service
-		DetailPrint "Removing any previous OpenVPN service..."
-		nsExec::ExecToLog '"$INSTDIR\bin\openvpnserv.exe" -remove'
-		Pop $R0 # return value/error/timeout
-
-		Sleep 3000
-	Pop $0 ; for FindWindow
+    Sleep 3000
 
 SectionEnd
 
@@ -311,25 +276,6 @@ Section /o "TAP Virtual Ethernet Adapter" SecTAP
 	Delete "$TEMP\tap-windows.exe"
 
 	WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\${PACKAGE_NAME}" "tap" "installed"
-SectionEnd
-
-Section /o "${PACKAGE_NAME} GUI" SecOpenVPNGUI
-
-	SetOverwrite on
-	SetOutPath "$INSTDIR\bin"
-
-	File "${OPENVPN_ROOT}\bin\openvpn-gui.exe"
-
-	${If} ${SectionIsSelected} ${SecAddShortcutsWorkaround}
-		CreateDirectory "$SMPROGRAMS\${PACKAGE_NAME}"
-		CreateShortCut "$SMPROGRAMS\${PACKAGE_NAME}\${PACKAGE_NAME} GUI.lnk" "$INSTDIR\bin\openvpn-gui.exe" ""
-		CreateShortcut "$DESKTOP\${PACKAGE_NAME} GUI.lnk" "$INSTDIR\bin\openvpn-gui.exe"
-
-		# This is required because of commit 2bb1726764344 ("Do not disconnect on suspend").
-		# Without this users will experience weired disconnections after suspend/resume.
-		WriteRegStr "HKLM" "Software\OpenVPN-GUI" "disconnect_on_suspend" "0"
-
-	${EndIf}
 SectionEnd
 
 Section /o "${PACKAGE_NAME} File Associations" SecFileAssociation
@@ -433,7 +379,6 @@ Function .onInit
 	!insertmacro SelectByParameter ${SecOpenVPNUserSpace} SELECT_OPENVPN 1
 	!insertmacro SelectByParameter ${SecService} SELECT_SERVICE 1
 	!insertmacro SelectByParameter ${SecTAP} SELECT_TAP 1
-	!insertmacro SelectByParameter ${SecOpenVPNGUI} SELECT_OPENVPNGUI 1
 	!insertmacro SelectByParameter ${SecFileAssociation} SELECT_ASSOCIATIONS 1
 	!insertmacro SelectByParameter ${SecOpenSSLUtilities} SELECT_OPENSSL_UTILITIES 1
 	!insertmacro SelectByParameter ${SecOpenVPNEasyRSA} SELECT_EASYRSA 1
@@ -451,8 +396,6 @@ Function .onInit
     SectionSetFlags ${SecService} $0
     IntOp $0 ${SF_SELECTED} | ${SF_RO}
     SectionSetFlags ${SecTAP} $0
-    IntOp $0 ${SF_SELECTED} | ${SF_RO}
-    SectionSetFlags ${SecOpenVPNGUI} $0
     IntOp $0 ${SF_SELECTED} | ${SF_RO}
     SectionSetFlags ${SecFileAssociation} $0
     IntOp $0 ${SF_SELECTED} | ${SF_RO}
@@ -510,19 +453,6 @@ Function .onSelChange
 	${EndIf}
 FunctionEnd
 
-Function StartGUI.show
-	; if the user chooses not to install the GUI, do not offer to start it
-	${IfNot} ${SectionIsSelected} ${SecOpenVPNGUI}
-		SendMessage $mui.FinishPage.Run ${BM_SETCHECK} ${BST_CHECKED} 0
-		ShowWindow $mui.FinishPage.Run 0
-	${EndIf}
-
-	; if we killed the GUI to do the install/upgrade, automatically tick the "Start OpenVPN GUI" option
-	${If} $strGuiKilled == "1"
-		SendMessage $mui.FinishPage.Run ${BM_SETCHECK} ${BST_CHECKED} 1
-	${EndIf}
-FunctionEnd
-
 ;--------------------
 ;Post-install section
 
@@ -554,7 +484,6 @@ SectionEnd
 !insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN
 	!insertmacro MUI_DESCRIPTION_TEXT ${SecOpenVPNUserSpace} $(DESC_SecOpenVPNUserSpace)
 	!insertmacro MUI_DESCRIPTION_TEXT ${SecService} $(DESC_SecService)
-	!insertmacro MUI_DESCRIPTION_TEXT ${SecOpenVPNGUI} $(DESC_SecOpenVPNGUI)
 	!insertmacro MUI_DESCRIPTION_TEXT ${SecTAP} $(DESC_SecTAP)
 	!insertmacro MUI_DESCRIPTION_TEXT ${SecOpenVPNEasyRSA} $(DESC_SecOpenVPNEasyRSA)
 	!insertmacro MUI_DESCRIPTION_TEXT ${SecOpenSSLUtilities} $(DESC_SecOpenSSLUtilities)
@@ -580,18 +509,6 @@ FunctionEnd
 
 Section "Uninstall"
 
-	; Stop OpenVPN-GUI if currently running
-	DetailPrint "Stopping OpenVPN-GUI..."
-	StopGUI:
-
-	FindWindow $0 "OpenVPN-GUI"
-	IntCmp $0 0 guiClosed
-	SendMessage $0 ${WM_CLOSE} 0 0
-	Sleep 100
-	Goto StopGUI
-
-	guiClosed:
-
 	; Stop OpenVPN if currently running
 	DetailPrint "Removing OpenVPN Service..."
 	nsExec::ExecToLog '"$INSTDIR\bin\openvpnserv.exe" -remove'
@@ -610,9 +527,6 @@ Section "Uninstall"
 	${EndIf}
 
     ${un.EnvVarUpdate} $R0 "PATH" "R" "HKLM" "$INSTDIR\bin"
-
-	Delete "$INSTDIR\bin\openvpn-gui.exe"
-	Delete "$DESKTOP\${PACKAGE_NAME} GUI.lnk"
 
 	Delete "$INSTDIR\bin\openvpn.exe"
 	Delete "$INSTDIR\bin\openvpnserv.exe"
